@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f0f13">
+<meta name="description" content="Busca manga en MangaDex, ComicK, MangaPlus y más">
+<title>MangaSearch</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f13;
+    --bg2: #16161d;
+    --bg3: #1e1e27;
+    --accent: #7c5cbf;
+    --accent2: #a07be8;
+    --text: #f0eff8;
+    --text2: #9994b8;
+    --text3: #5e5a7a;
+    --border: rgba(255,255,255,0.07);
+    --card: #1a1a24;
+    --radius: 12px;
+    --mangadex: #f77f00;
+    --comick: #00b4d8;
+    --mangaplus: #e63946;
+    --bato: #06d6a0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* HEADER */
+  header {
+    padding: 20px 16px 0;
+    text-align: center;
+    position: relative;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent2), #e0c3fc);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .logo span { -webkit-text-fill-color: var(--text2); font-weight: 400; }
+
+  /* SEARCH */
+  .search-wrap {
+    padding: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: linear-gradient(to bottom, var(--bg) 80%, transparent);
+  }
+  .search-box {
+    display: flex;
+    gap: 8px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 6px 6px 6px 16px;
+    transition: border-color .2s;
+  }
+  .search-box:focus-within { border-color: var(--accent); }
+  .search-box input {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+  }
+  .search-box input::placeholder { color: var(--text3); }
+  .search-box button {
+    background: var(--accent);
+    border: none;
+    border-radius: 50px;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 8px 18px;
+    cursor: pointer;
+    transition: background .2s, transform .1s;
+    white-space: nowrap;
+  }
+  .search-box button:active { transform: scale(0.97); background: var(--accent2); }
+
+  /* SOURCE PILLS */
+  .sources {
+    display: flex;
+    gap: 8px;
+    padding: 0 16px 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .sources::-webkit-scrollbar { display: none; }
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .2s;
+    color: var(--text2);
+    user-select: none;
+  }
+  .pill.active { border-color: var(--src-color); color: var(--text); background: rgba(255,255,255,0.05); }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--src-color); }
+
+  /* STATUS */
+  .status {
+    text-align: center;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--text3);
+    min-height: 32px;
+  }
+  .loading-dots span {
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent2);
+    margin: 0 2px;
+    animation: bounce 1.2s infinite;
+  }
+  .loading-dots span:nth-child(2) { animation-delay: .2s; }
+  .loading-dots span:nth-child(3) { animation-delay: .4s; }
+  @keyframes bounce {
+    0%,60%,100% { transform: translateY(0); opacity:.4; }
+    30% { transform: translateY(-6px); opacity:1; }
+  }
+
+  /* RESULTS */
+  .results { padding: 0 16px 80px; }
+  .source-section { margin-bottom: 24px; }
+  .source-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .source-header .badge {
+    font-size: 11px;
+    background: var(--bg3);
+    border-radius: 50px;
+    padding: 2px 8px;
+    color: var(--text3);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .source-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* MANGA CARD */
+  .manga-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+  .manga-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform .2s, border-color .2s;
+    text-decoration: none;
+    display: block;
+  }
+  .manga-card:active { transform: scale(0.97); }
+  .manga-card:hover { border-color: rgba(124,92,191,0.4); }
+  .manga-cover {
+    width: 100%;
+    aspect-ratio: 2/3;
+    object-fit: cover;
+    display: block;
+    background: var(--bg3);
+  }
+  .manga-cover.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+  }
+  .manga-info { padding: 8px; }
+  .manga-title {
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--text);
+  }
+  .manga-meta {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+  .manga-source-tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  /* OPEN IN MIHON BTN */
+  .open-btn {
+    position: fixed;
+    bottom: 20px;
+    right: 16px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px 20px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(124,92,191,0.4);
+    display: none;
+    align-items: center;
+    gap: 8px;
+    z-index: 200;
+  }
+  .open-btn.show { display: flex; }
+
+  /* EMPTY / ERROR */
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text3);
+  }
+  .empty .icon { font-size: 48px; margin-bottom: 16px; }
+  .empty h3 { font-family: 'Syne', sans-serif; color: var(--text2); margin-bottom: 8px; }
+
+  /* MODAL */
+  .modal-bg {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 300;
+    backdrop-filter: blur(4px);
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-bg.open { display: flex; }
+  .modal {
+    background: var(--bg2);
+    border-radius: 20px 20px 0 0;
+    width: 100%;
+    max-width: 600px;
+    padding: 20px;
+    max-height: 85vh;
+    overflow-y: auto;
+  }
+  .modal-handle {
+    width: 40px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 16px;
+  }
+  .modal-cover {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+  }
+  .modal-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    margin-bottom: 6px;
+  }
+  .modal-desc {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    margin: 12px 0;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .btn-mihon {
+    flex: 1;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 12px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    min-width: 140px;
+  }
+  .btn-source {
+    flex: 1;
+    background: var(--bg3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    text-decoration: none;
+    min-width: 140px;
+    display: block;
+  }
+  .modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: var(--bg3);
+    border: none;
+    color: var(--text2);
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-wrap { position: relative; }
+  .tag {
+    display: inline-block;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text2);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin: 3px 2px;
+  }
+  .tags-row { margin: 8px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Manga<span>Search</span></div>
+</header>
+
+<div class="search-wrap">
+  <div class="search-box">
+    <input type="text" id="q" placeholder="Buscar manga..." autocomplete="off" autocorrect="off" spellcheck="false">
+    <button onclick="doSearch()">Buscar</button>
+  </div>
+</div>
+
+<div class="sources" id="sources">
+  <div class="pill active" style="--src-color:#f77f00" data-src="mangadex" onclick="toggleSource(this)">
+    <span class="dot"></span> MangaDex
+  </div>
+  <div class="pill active" style="--src-color:#00b4d8" data-src="comick" onclick="toggleSource(this)">
+    <span class="dot"></span> ComicK
+  </div>
+  <div class="pill active" style="--src-color:#e63946" data-src="mangaplus" onclick="toggleSource(this)">
+    <span class="dot"></span> MangaPlus
+  </div>
+  <div class="pill active" style="--src-color:#06d6a0" data-src="bato" onclick="toggleSource(this)">
+    <span class="dot"></span> Bato.to
+  </div>
+</div>
+
+<div class="status" id="status">Escribí un manga y buscá en todas las fuentes a la vez</div>
+
+<div class="results" id="results"></div>
+
+<!-- MODAL -->
+<div class="modal-bg" id="modal" onclick="closeModal(event)">
+  <div class="modal modal-wrap">
+    <div class="modal-handle"></div>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <img id="m-cover" class="modal-cover" src="" alt="" onerror="this.style.display='none'">
+    <div class="modal-title" id="m-title"></div>
+    <div id="m-tags" class="tags-row"></div>
+    <div class="modal-desc" id="m-desc"></div>
+    <div class="modal-actions">
+      <button class="btn-mihon" onclick="openMihon()">📖 Abrir en Mihon</button>
+      <a class="btn-source" id="m-link" href="#" target="_blank">🔗 Ver en la web</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const SOURCES = {
+  mangadex: { name: 'MangaDex', color: '#f77f00' },
+  comick:   { name: 'ComicK',   color: '#00b4d8' },
+  mangaplus:{ name: 'MangaPlus',color: '#e63946' },
+  bato:     { name: 'Bato.to',  color: '#06d6a0' },
+};
+
+let activeSources = new Set(['mangadex','comick','mangaplus','bato']);
+let currentManga = null;
+
+function toggleSource(el) {
+  const src = el.dataset.src;
+  if (activeSources.has(src)) {
+    if (activeSources.size === 1) return;
+    activeSources.delete(src);
+    el.classList.remove('active');
+  } else {
+    activeSources.add(src);
+    el.classList.add('active');
+  }
+}
+
+const input = document.getElementById('q');
+input.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+function setStatus(html) {
+  document.getElementById('status').innerHTML = html;
+}
+
+async function doSearch() {
+  const q = input.value.trim();
+  if (!q) return;
+  document.getElementById('results').innerHTML = '';
+  setStatus('<div class="loading-dots"><span></span><span></span><span></span></div>');
+
+  const searches = [];
+  if (activeSources.has('mangadex'))  searches.push(searchMangaDex(q));
+  if (activeSources.has('comick'))    searches.push(searchComicK(q));
+  if (activeSources.has('mangaplus')) searches.push(searchMangaPlus(q));
+  if (activeSources.has('bato'))      searches.push(searchBato(q));
+
+  const allResults = await Promise.allSettled(searches);
+  let totalCount = 0;
+
+  allResults.forEach(r => {
+    if (r.status === 'fulfilled' && r.value) {
+      renderSection(r.value);
+      totalCount += r.value.items.length;
+    }
+  });
+
+  if (totalCount === 0) {
+    setStatus('Sin resultados para "' + q + '"');
+    document.getElementById('results').innerHTML = `
+      <div class="empty">
+        <div class="icon">🔍</div>
+        <h3>Sin resultados</h3>
+        <p>Probá con otro título o activá más fuentes</p>
+      </div>`;
+  } else {
+    setStatus(totalCount + ' resultados encontrados');
+  }
+}
+
+function renderSection({ source, items, error }) {
+  if (error) {
+    const el = document.createElement('div');
+    el.className = 'source-section';
+    el.innerHTML = `<div class="source-header">
+      <span class="source-dot" style="background:${SOURCES[source].color}"></span>
+      ${SOURCES[source].name}
+      <span class="badge" style="color:#e63946">Error al conectar</span>
+    </div>`;
+    document.getElementById('results').appendChild(el);
+    return;
+  }
+  if (!items.length) return;
+
+  const sec = document.createElement('div');
+  sec.className = 'source-section';
+  sec.innerHTML = `<div class="source-header">
+    <span class="source-dot" style="background:${SOURCES[source].color}"></span>
+    ${SOURCES[source].name}
+    <span class="badge">${items.length} resultado${items.length !== 1 ? 's' : ''}</span>
+  </div><div class="manga-grid" id="grid-${source}"></div>`;
+  document.getElementById('results').appendChild(sec);
+
+  const grid = document.getElementById('grid-' + source);
+  items.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'manga-card';
+    card.onclick = () => openModal(m);
+    card.innerHTML = `
+      ${m.cover
+        ? `<img class="manga-cover" src="${m.cover}" alt="${m.title}" loading="lazy" onerror="this.outerHTML='<div class=\\'manga-cover placeholder\\'>📚</div>'">`
+        : `<div class="manga-cover placeholder">📚</div>`}
+      <div class="manga-info">
+        <div class="manga-title">${m.title}</div>
+        <div class="manga-meta">${m.year || ''}</div>
+        <div class="manga-source-tag" style="background:${SOURCES[source].color}22;color:${SOURCES[source].color}">${SOURCES[source].name}</div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ── MangaDex ──────────────────────────────────────────
+async function searchMangaDex(q) {
+  try {
+    const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(q)}&limit=12&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const items = (json.data || []).map(m => {
+      const titleObj = m.attributes.title;
+      const title = titleObj.en || titleObj['ja-ro'] || titleObj.ja || Object.values(titleObj)[0] || 'Sin título';
+      const coverRel = m.relationships.find(r => r.type === 'cover_art');
+      const cover = coverRel ? `https://uploads.mangadex.org/covers/${m.id}/${coverRel.attributes?.fileName}.256.jpg` : null;
+      const desc = m.attributes.description?.en || '';
+      const tags = (m.attributes.tags || []).slice(0, 6).map(t => t.attributes.name.en);
+      const year = m.attributes.year;
+      return {
+        id: m.id, title, cover, desc, tags, year,
+        source: 'mangadex',
+        url: `https://mangadex.org/title/${m.id}`,
+        mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}`,
+      };
+    });
+    return { source: 'mangadex', items };
+  } catch(e) {
+    return { source: 'mangadex', items: [], error: true };
+  }
+}
+
+// ── ComicK ────────────────────────────────────────────
+async function searchComicK(q) {
+  try {
+    const url = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const items = (Array.isArray(json) ? json : []).slice(0,12).map(m => {
+      const cover = m.md_covers?.[0]?.b2key
+        ? `https://meo.comick.pictures/${m.md_covers[0].b2key}`
+        : null;
+      return {
+        id: m.hid, title: m.title || m.slug, cover,
+        desc: m.desc || '',
+        tags: (m.md_genres || []).slice(0, 6).map(g => g.name || g),
+        year: m.year,
+        source: 'comick',
+        url: `https://comick.io/comic/${m.hid}`,
+        mihon: `tachiyomi://manga?sourceId=357479478364072240&id=${m.hid}`,
+      };
+    });
+    return { source: 'comick', items };
+  } catch(e) {
+    return { source: 'comick', items: [], error: true };
+  }
+}
+
+// ── MangaPlus (ShonenJump) ────────────────────────────
+async function searchMangaPlus(q) {
+  try {
+    const url = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const titles = json.success?.titleRankingView?.titles || json.success?.allTitlesView?.titles || [];
+    const filtered = titles.filter(t =>
+      t.name.toLowerCase().includes(q.toLowerCase())
+    ).slice(0, 8);
+    const items = filtered.map(t => ({
+      id: t.titleId,
+      title: t.name,
+      cover: t.portraitImageUrl || t.thumbnailUrl,
+      desc: t.overview || '',
+      tags: [],
+      year: null,
+      source: 'mangaplus',
+      url: `https://mangaplus.shueisha.co.jp/titles/${t.titleId}`,
+      mihon: `tachiyomi://manga?sourceId=1998944621602463541&id=${t.titleId}`,
+    }));
+    return { source: 'mangaplus', items };
+  } catch(e) {
+    return { source: 'mangaplus', items: [], error: true };
+  }
+}
+
+// ── Bato.to ───────────────────────────────────────────
+async function searchBato(q) {
+  try {
+    const url = `https://bato.to/apo/?query=query+getContent%28%24select%3ASelectContent!%2C%24range%3ARange%2C%24where%3AWhereContent%29+%7BgetContent%28select%3A%24select%2Crange%3A%24range%2Cwhere%3A%24where%29+%7Bidges+%7Bdata+%7Bid+name+urlPath+altNames+genres+authors+artists+originalStatus+uploadStatus+summary+tranLang+chapterCount+stat%7BvotesPlus+reviewCount+follow%7D+urlCoverOri+urlCover600+urlCover300%7D%7D+edges%7B+cursor%7D+total%7D%7D&variables=%7B%22select%22%3A%7B%22where%22%3A%7B%22name_ilike%22%3A%22${encodeURIComponent(q)}%22%7D%2C%22range%22%3A%7B%22from%22%3A0%2C%22size%22%3A12%7D%7D%7D`;
+    const res = await fetch('https://bato.to/apo/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
+      }),
+    });
+    const json = await res.json();
+    const edges = json?.data?.getContent?.edges || [];
+    const items = edges.map(e => {
+      const d = e.data;
+      return {
+        id: d.id, title: d.name,
+        cover: d.urlCover300,
+        desc: d.summary || '',
+        tags: (d.genres || []).slice(0, 6),
+        year: null,
+        source: 'bato',
+        url: `https://bato.to${d.urlPath}`,
+        mihon: `tachiyomi://manga?sourceId=2655689874979638617&id=${d.id}`,
+      };
+    });
+    return { source: 'bato', items };
+  } catch(e) {
+    return { source: 'bato', items: [], error: true };
+  }
+}
+
+// ── MODAL ─────────────────────────────────────────────
+function openModal(m) {
+  currentManga = m;
+  document.getElementById('m-cover').src = m.cover || '';
+  document.getElementById('m-title').textContent = m.title;
+  document.getElementById('m-desc').textContent = m.desc || 'Sin descripción disponible.';
+  document.getElementById('m-link').href = m.url;
+  const tagsEl = document.getElementById('m-tags');
+  tagsEl.innerHTML = (m.tags || []).map(t => `<span class="tag">${t}</span>`).join('');
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal')) {
+    document.getElementById('modal').classList.remove('open');
+  }
+}
+
+function openMihon() {
+  if (!currentManga) return;
+  window.location.href = currentManga.mihon;
+  setTimeout(() => {
+    alert('Si Mihon no se abrió, asegurate de tener instalada la fuente correspondiente.');
+  }, 1500);
+}
+</script>
+</body>
+</html>
