@@ -378,7 +378,7 @@
 
 <header>
   <div class="logo">Manga<span>Search</span></div>
-  <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Sans',sans-serif;">v1.1</div>
+  <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Sans',sans-serif;">v1.1.0</div>
 </header>
 
 <div class="search-wrap">
@@ -535,14 +535,50 @@ function renderSection({ source, items, error }) {
   });
 }
 
-const PROXY = 'https://corsproxy.io/?';
+// Proxies CORS en orden de prioridad — se prueba el siguiente si falla
+const PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://proxy.cors.sh/${url}`,
+];
+
+async function fetchWithProxy(url, opts = {}) {
+  // Primero intentar directo (por si la API tiene CORS abierto)
+  try {
+    const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(5000) });
+    if (r.ok) return r;
+  } catch(_) {}
+  // Probar cada proxy
+  for (const proxy of PROXIES) {
+    try {
+      const proxyUrl = proxy(url);
+      const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
+      if (r.ok) return r;
+    } catch(_) {}
+  }
+  throw new Error('Todos los proxies fallaron');
+}
+
+async function fetchPostWithProxy(url, body) {
+  for (const proxy of PROXIES) {
+    try {
+      const r = await fetch(proxy(url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.ok) return r;
+    } catch(_) {}
+  }
+  throw new Error('Todos los proxies fallaron');
+}
 
 // ── MangaDex ──────────────────────────────────────────
 async function searchMangaDex(q) {
   try {
     const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(q)}&limit=12&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const res = await fetchWithProxy(url);
     const json = await res.json();
     const items = (json.data || []).map(m => {
       const titleObj = m.attributes.title;
@@ -569,9 +605,8 @@ async function searchMangaDex(q) {
 // ── ComicK ────────────────────────────────────────────
 async function searchComicK(q) {
   try {
-    const target = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
-    const res = await fetch(PROXY + encodeURIComponent(target));
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const url = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
+    const res = await fetchWithProxy(url);
     const json = await res.json();
     const items = (Array.isArray(json) ? json : []).slice(0,12).map(m => {
       const cover = m.md_covers?.[0]?.b2key
@@ -596,9 +631,8 @@ async function searchComicK(q) {
 // ── MangaPlus ─────────────────────────────────────────
 async function searchMangaPlus(q) {
   try {
-    const target = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all?lang=eng`;
-    const res = await fetch(PROXY + encodeURIComponent(target));
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const url = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all?lang=eng`;
+    const res = await fetchWithProxy(url);
     const json = await res.json();
     const titles = json.success?.allTitlesViewV2?.AllTitlesGroup?.flatMap(g => g.titles) ||
                    json.success?.allTitlesView?.titles || [];
@@ -622,16 +656,10 @@ async function searchMangaPlus(q) {
 // ── Bato.to ───────────────────────────────────────────
 async function searchBato(q) {
   try {
-    const target = 'https://bato.to/apo/';
     const body = JSON.stringify({
-      query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'\\\"')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
+      query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
     });
-    const res = await fetch(PROXY + encodeURIComponent(target), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
-      body,
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const res = await fetchPostWithProxy('https://bato.to/apo/', body);
     const json = await res.json();
     const edges = json?.data?.getContent?.edges || [];
     const items = edges.map(e => {
