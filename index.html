@@ -378,6 +378,7 @@
 
 <header>
   <div class="logo">Manga<span>Search</span></div>
+  <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Sans',sans-serif;">v1.1</div>
 </header>
 
 <div class="search-wrap">
@@ -464,27 +465,33 @@ async function doSearch() {
   if (activeSources.has('mangaplus')) searches.push(searchMangaPlus(q));
   if (activeSources.has('bato'))      searches.push(searchBato(q));
 
-  const allResults = await Promise.allSettled(searches);
   let totalCount = 0;
+  let done = 0;
+  const total = searches.length;
 
-  allResults.forEach(r => {
-    if (r.status === 'fulfilled' && r.value) {
-      renderSection(r.value);
-      totalCount += r.value.items.length;
+  // Render cada fuente en cuanto llega, sin esperar las demás
+  await Promise.all(searches.map(p => p.then(result => {
+    done++;
+    if (result) {
+      renderSection(result);
+      totalCount += result.items?.length || 0;
     }
-  });
-
-  if (totalCount === 0) {
-    setStatus('Sin resultados para "' + q + '"');
-    document.getElementById('results').innerHTML = `
-      <div class="empty">
-        <div class="icon">🔍</div>
-        <h3>Sin resultados</h3>
-        <p>Probá con otro título o activá más fuentes</p>
-      </div>`;
-  } else {
-    setStatus(totalCount + ' resultados encontrados');
-  }
+    if (done < total) {
+      setStatus(`<div class="loading-dots"><span></span><span></span><span></span></div> ${done}/${total} fuentes`);
+    } else {
+      if (totalCount === 0) {
+        setStatus('Sin resultados para "' + q + '"');
+        document.getElementById('results').innerHTML = `
+          <div class="empty">
+            <div class="icon">🔍</div>
+            <h3>Sin resultados</h3>
+            <p>Probá con otro título o activá más fuentes</p>
+          </div>`;
+      } else {
+        setStatus(totalCount + ' resultados encontrados');
+      }
+    }
+  }).catch(() => { done++; })));
 }
 
 function renderSection({ source, items, error }) {
@@ -495,7 +502,6 @@ function renderSection({ source, items, error }) {
       <span class="source-dot" style="background:${SOURCES[source].color}"></span>
       ${SOURCES[source].name}
       <span class="badge" style="color:#e63946">Error al conectar</span>
-    </div>`;
     </div>`;
     document.getElementById('results').appendChild(el);
     return;
