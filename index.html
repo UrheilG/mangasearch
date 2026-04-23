@@ -496,6 +496,7 @@ function renderSection({ source, items, error }) {
       ${SOURCES[source].name}
       <span class="badge" style="color:#e63946">Error al conectar</span>
     </div>`;
+    </div>`;
     document.getElementById('results').appendChild(el);
     return;
   }
@@ -528,22 +529,26 @@ function renderSection({ source, items, error }) {
   });
 }
 
+const PROXY = 'https://corsproxy.io/?';
+
 // ── MangaDex ──────────────────────────────────────────
 async function searchMangaDex(q) {
   try {
     const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(q)}&limit=12&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
     const res = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (json.data || []).map(m => {
       const titleObj = m.attributes.title;
       const title = titleObj.en || titleObj['ja-ro'] || titleObj.ja || Object.values(titleObj)[0] || 'Sin título';
       const coverRel = m.relationships.find(r => r.type === 'cover_art');
-      const cover = coverRel ? `https://uploads.mangadex.org/covers/${m.id}/${coverRel.attributes?.fileName}.256.jpg` : null;
-      const desc = m.attributes.description?.en || '';
+      const cover = coverRel?.attributes?.fileName
+        ? `https://uploads.mangadex.org/covers/${m.id}/${coverRel.attributes.fileName}.256.jpg`
+        : null;
+      const desc = m.attributes.description?.en || m.attributes.description?.es || '';
       const tags = (m.attributes.tags || []).slice(0, 6).map(t => t.attributes.name.en);
-      const year = m.attributes.year;
       return {
-        id: m.id, title, cover, desc, tags, year,
+        id: m.id, title, cover, desc, tags, year: m.attributes.year,
         source: 'mangadex',
         url: `https://mangadex.org/title/${m.id}`,
         mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}`,
@@ -551,15 +556,16 @@ async function searchMangaDex(q) {
     });
     return { source: 'mangadex', items };
   } catch(e) {
-    return { source: 'mangadex', items: [], error: true };
+    return { source: 'mangadex', items: [], error: true, msg: e.message };
   }
 }
 
 // ── ComicK ────────────────────────────────────────────
 async function searchComicK(q) {
   try {
-    const url = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
-    const res = await fetch(url);
+    const target = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
+    const res = await fetch(PROXY + encodeURIComponent(target));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (Array.isArray(json) ? json : []).slice(0,12).map(m => {
       const cover = m.md_covers?.[0]?.b2key
@@ -568,7 +574,7 @@ async function searchComicK(q) {
       return {
         id: m.hid, title: m.title || m.slug, cover,
         desc: m.desc || '',
-        tags: (m.md_genres || []).slice(0, 6).map(g => g.name || g),
+        tags: (m.md_genres || []).slice(0,6).map(g => g.name || g),
         year: m.year,
         source: 'comick',
         url: `https://comick.io/comic/${m.hid}`,
@@ -577,57 +583,58 @@ async function searchComicK(q) {
     });
     return { source: 'comick', items };
   } catch(e) {
-    return { source: 'comick', items: [], error: true };
+    return { source: 'comick', items: [], error: true, msg: e.message };
   }
 }
 
-// ── MangaPlus (ShonenJump) ────────────────────────────
+// ── MangaPlus ─────────────────────────────────────────
 async function searchMangaPlus(q) {
   try {
-    const url = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all`;
-    const res = await fetch(url);
+    const target = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all?lang=eng`;
+    const res = await fetch(PROXY + encodeURIComponent(target));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
-    const titles = json.success?.titleRankingView?.titles || json.success?.allTitlesView?.titles || [];
-    const filtered = titles.filter(t =>
-      t.name.toLowerCase().includes(q.toLowerCase())
-    ).slice(0, 8);
+    const titles = json.success?.allTitlesViewV2?.AllTitlesGroup?.flatMap(g => g.titles) ||
+                   json.success?.allTitlesView?.titles || [];
+    const ql = q.toLowerCase();
+    const filtered = titles.filter(t => t.name?.toLowerCase().includes(ql)).slice(0, 8);
     const items = filtered.map(t => ({
-      id: t.titleId,
-      title: t.name,
-      cover: t.portraitImageUrl || t.thumbnailUrl,
+      id: t.titleId, title: t.name,
+      cover: t.portraitImageUrl || t.thumbnailUrl || null,
       desc: t.overview || '',
-      tags: [],
-      year: null,
+      tags: [], year: null,
       source: 'mangaplus',
       url: `https://mangaplus.shueisha.co.jp/titles/${t.titleId}`,
       mihon: `tachiyomi://manga?sourceId=1998944621602463541&id=${t.titleId}`,
     }));
     return { source: 'mangaplus', items };
   } catch(e) {
-    return { source: 'mangaplus', items: [], error: true };
+    return { source: 'mangaplus', items: [], error: true, msg: e.message };
   }
 }
 
 // ── Bato.to ───────────────────────────────────────────
 async function searchBato(q) {
   try {
-    const url = `https://bato.to/apo/?query=query+getContent%28%24select%3ASelectContent!%2C%24range%3ARange%2C%24where%3AWhereContent%29+%7BgetContent%28select%3A%24select%2Crange%3A%24range%2Cwhere%3A%24where%29+%7Bidges+%7Bdata+%7Bid+name+urlPath+altNames+genres+authors+artists+originalStatus+uploadStatus+summary+tranLang+chapterCount+stat%7BvotesPlus+reviewCount+follow%7D+urlCoverOri+urlCover600+urlCover300%7D%7D+edges%7B+cursor%7D+total%7D%7D&variables=%7B%22select%22%3A%7B%22where%22%3A%7B%22name_ilike%22%3A%22${encodeURIComponent(q)}%22%7D%2C%22range%22%3A%7B%22from%22%3A0%2C%22size%22%3A12%7D%7D%7D`;
-    const res = await fetch('https://bato.to/apo/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
-      }),
+    const target = 'https://bato.to/apo/';
+    const body = JSON.stringify({
+      query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'\\\"')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
     });
+    const res = await fetch(PROXY + encodeURIComponent(target), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-requested-with': 'XMLHttpRequest' },
+      body,
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const edges = json?.data?.getContent?.edges || [];
     const items = edges.map(e => {
       const d = e.data;
       return {
         id: d.id, title: d.name,
-        cover: d.urlCover300,
+        cover: d.urlCover300 || null,
         desc: d.summary || '',
-        tags: (d.genres || []).slice(0, 6),
+        tags: (d.genres || []).slice(0,6),
         year: null,
         source: 'bato',
         url: `https://bato.to${d.urlPath}`,
@@ -636,7 +643,7 @@ async function searchBato(q) {
     });
     return { source: 'bato', items };
   } catch(e) {
-    return { source: 'bato', items: [], error: true };
+    return { source: 'bato', items: [], error: true, msg: e.message };
   }
 }
 
