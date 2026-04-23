@@ -378,7 +378,7 @@
 
 <header>
   <div class="logo">Manga<span>Search</span></div>
-  <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Sans',sans-serif;">v1.1.0</div>
+  <div style="font-size:11px;color:var(--text3);margin-top:2px;font-family:'DM Sans',sans-serif;">v1.2.0</div>
 </header>
 
 <div class="search-wrap">
@@ -392,14 +392,17 @@
   <div class="pill active" style="--src-color:#f77f00" data-src="mangadex" onclick="toggleSource(this)">
     <span class="dot"></span> MangaDex
   </div>
-  <div class="pill active" style="--src-color:#00b4d8" data-src="comick" onclick="toggleSource(this)">
-    <span class="dot"></span> ComicK
+  <div class="pill active" style="--src-color:#02a9ff" data-src="anilist" onclick="toggleSource(this)">
+    <span class="dot"></span> AniList
   </div>
-  <div class="pill active" style="--src-color:#e63946" data-src="mangaplus" onclick="toggleSource(this)">
-    <span class="dot"></span> MangaPlus
+  <div class="pill active" style="--src-color:#ff6d4a" data-src="kitsu" onclick="toggleSource(this)">
+    <span class="dot"></span> Kitsu
   </div>
-  <div class="pill active" style="--src-color:#06d6a0" data-src="bato" onclick="toggleSource(this)">
-    <span class="dot"></span> Bato.to
+  <div class="pill active" style="--src-color:#e91e63" data-src="myanimelist" onclick="toggleSource(this)">
+    <span class="dot"></span> MyAnimeList
+  </div>
+  <div class="pill active" style="--src-color:#9c27b0" data-src="mangaupdates" onclick="toggleSource(this)">
+    <span class="dot"></span> MangaUpdates
   </div>
 </div>
 
@@ -425,13 +428,14 @@
 
 <script>
 const SOURCES = {
-  mangadex: { name: 'MangaDex', color: '#f77f00' },
-  comick:   { name: 'ComicK',   color: '#00b4d8' },
-  mangaplus:{ name: 'MangaPlus',color: '#e63946' },
-  bato:     { name: 'Bato.to',  color: '#06d6a0' },
+  mangadex:    { name: 'MangaDex',    color: '#f77f00' },
+  anilist:     { name: 'AniList',     color: '#02a9ff' },
+  kitsu:       { name: 'Kitsu',       color: '#ff6d4a' },
+  myanimelist: { name: 'MyAnimeList', color: '#e91e63' },
+  mangaupdates:{ name: 'MangaUpdates',color: '#9c27b0' },
 };
 
-let activeSources = new Set(['mangadex','comick','mangaplus','bato']);
+let activeSources = new Set(['mangadex','anilist','kitsu','myanimelist','mangaupdates']);
 let currentManga = null;
 
 function toggleSource(el) {
@@ -460,10 +464,11 @@ async function doSearch() {
   setStatus('<div class="loading-dots"><span></span><span></span><span></span></div>');
 
   const searches = [];
-  if (activeSources.has('mangadex'))  searches.push(searchMangaDex(q));
-  if (activeSources.has('comick'))    searches.push(searchComicK(q));
-  if (activeSources.has('mangaplus')) searches.push(searchMangaPlus(q));
-  if (activeSources.has('bato'))      searches.push(searchBato(q));
+  if (activeSources.has('mangadex'))    searches.push(searchMangaDex(q));
+  if (activeSources.has('anilist'))     searches.push(searchAniList(q));
+  if (activeSources.has('kitsu'))       searches.push(searchKitsu(q));
+  if (activeSources.has('myanimelist')) searches.push(searchMAL(q));
+  if (activeSources.has('mangaupdates'))searches.push(searchMangaUpdates(q));
 
   let totalCount = 0;
   let done = 0;
@@ -535,151 +540,136 @@ function renderSection({ source, items, error }) {
   });
 }
 
-// Proxies CORS en orden de prioridad — se prueba el siguiente si falla
-const PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://proxy.cors.sh/${url}`,
-];
-
-async function fetchWithProxy(url, opts = {}) {
-  // Primero intentar directo (por si la API tiene CORS abierto)
-  try {
-    const r = await fetch(url, { ...opts, signal: AbortSignal.timeout(5000) });
-    if (r.ok) return r;
-  } catch(_) {}
-  // Probar cada proxy
-  for (const proxy of PROXIES) {
-    try {
-      const proxyUrl = proxy(url);
-      const r = await fetch(proxyUrl, { signal: AbortSignal.timeout(8000) });
-      if (r.ok) return r;
-    } catch(_) {}
-  }
-  throw new Error('Todos los proxies fallaron');
-}
-
-async function fetchPostWithProxy(url, body) {
-  for (const proxy of PROXIES) {
-    try {
-      const r = await fetch(proxy(url), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.ok) return r;
-    } catch(_) {}
-  }
-  throw new Error('Todos los proxies fallaron');
-}
-
 // ── MangaDex ──────────────────────────────────────────
 async function searchMangaDex(q) {
   try {
     const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(q)}&limit=12&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-    const res = await fetchWithProxy(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (json.data || []).map(m => {
-      const titleObj = m.attributes.title;
-      const title = titleObj.en || titleObj['ja-ro'] || titleObj.ja || Object.values(titleObj)[0] || 'Sin título';
+      const t = m.attributes.title;
+      const title = t.en || t['ja-ro'] || t.ja || Object.values(t)[0] || 'Sin título';
       const coverRel = m.relationships.find(r => r.type === 'cover_art');
       const cover = coverRel?.attributes?.fileName
         ? `https://uploads.mangadex.org/covers/${m.id}/${coverRel.attributes.fileName}.256.jpg`
         : null;
       const desc = m.attributes.description?.en || m.attributes.description?.es || '';
-      const tags = (m.attributes.tags || []).slice(0, 6).map(t => t.attributes.name.en);
-      return {
-        id: m.id, title, cover, desc, tags, year: m.attributes.year,
-        source: 'mangadex',
-        url: `https://mangadex.org/title/${m.id}`,
-        mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}`,
-      };
+      const tags = (m.attributes.tags || []).slice(0,6).map(t => t.attributes.name.en);
+      return { id: m.id, title, cover, desc, tags, year: m.attributes.year,
+        source: 'mangadex', url: `https://mangadex.org/title/${m.id}`,
+        mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}` };
     });
     return { source: 'mangadex', items };
-  } catch(e) {
-    return { source: 'mangadex', items: [], error: true, msg: e.message };
-  }
+  } catch(e) { return { source: 'mangadex', items: [], error: true }; }
 }
 
-// ── ComicK ────────────────────────────────────────────
-async function searchComicK(q) {
+// ── AniList ───────────────────────────────────────────
+async function searchAniList(q) {
   try {
-    const url = `https://api.comick.fun/v1.0/search?q=${encodeURIComponent(q)}&limit=12&type=comic`;
-    const res = await fetchWithProxy(url);
-    const json = await res.json();
-    const items = (Array.isArray(json) ? json : []).slice(0,12).map(m => {
-      const cover = m.md_covers?.[0]?.b2key
-        ? `https://meo.comick.pictures/${m.md_covers[0].b2key}`
-        : null;
-      return {
-        id: m.hid, title: m.title || m.slug, cover,
-        desc: m.desc || '',
-        tags: (m.md_genres || []).slice(0,6).map(g => g.name || g),
-        year: m.year,
-        source: 'comick',
-        url: `https://comick.io/comic/${m.hid}`,
-        mihon: `tachiyomi://manga?sourceId=357479478364072240&id=${m.hid}`,
-      };
+    const query = `query($s:String){Page(perPage:12){media(search:$s,type:MANGA,sort:SEARCH_MATCH){id title{romaji english native}coverImage{large}description(asHtml:false)genres startDate{year}siteUrl}}}`;
+    const res = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ query, variables: { s: q } }),
+      signal: AbortSignal.timeout(8000),
     });
-    return { source: 'comick', items };
-  } catch(e) {
-    return { source: 'comick', items: [], error: true, msg: e.message };
-  }
-}
-
-// ── MangaPlus ─────────────────────────────────────────
-async function searchMangaPlus(q) {
-  try {
-    const url = `https://jumpg-webapi.tokyo-cdn.com/api/title_list/all?lang=eng`;
-    const res = await fetchWithProxy(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
-    const titles = json.success?.allTitlesViewV2?.AllTitlesGroup?.flatMap(g => g.titles) ||
-                   json.success?.allTitlesView?.titles || [];
-    const ql = q.toLowerCase();
-    const filtered = titles.filter(t => t.name?.toLowerCase().includes(ql)).slice(0, 8);
-    const items = filtered.map(t => ({
-      id: t.titleId, title: t.name,
-      cover: t.portraitImageUrl || t.thumbnailUrl || null,
-      desc: t.overview || '',
-      tags: [], year: null,
-      source: 'mangaplus',
-      url: `https://mangaplus.shueisha.co.jp/titles/${t.titleId}`,
-      mihon: `tachiyomi://manga?sourceId=1998944621602463541&id=${t.titleId}`,
+    const items = (json.data?.Page?.media || []).map(m => ({
+      id: m.id,
+      title: m.title.english || m.title.romaji || m.title.native || 'Sin título',
+      cover: m.coverImage?.large || null,
+      desc: (m.description || '').replace(/<[^>]+>/g, ''),
+      tags: (m.genres || []).slice(0,6),
+      year: m.startDate?.year || null,
+      source: 'anilist',
+      url: m.siteUrl || `https://anilist.co/manga/${m.id}`,
+      mihon: `tachiyomi://manga?sourceId=8070566210182460573&id=${m.id}`,
     }));
-    return { source: 'mangaplus', items };
-  } catch(e) {
-    return { source: 'mangaplus', items: [], error: true, msg: e.message };
-  }
+    return { source: 'anilist', items };
+  } catch(e) { return { source: 'anilist', items: [], error: true }; }
 }
 
-// ── Bato.to ───────────────────────────────────────────
-async function searchBato(q) {
+// ── Kitsu ─────────────────────────────────────────────
+async function searchKitsu(q) {
   try {
-    const body = JSON.stringify({
-      query: `query { getContent(select: { where: { name_ilike: "${q.replace(/"/g,'')}" }, range: { from: 0, size: 12 } }) { edges { data { id name urlPath urlCover300 genres summary } } } }`,
+    const url = `https://kitsu.app/api/edge/manga?filter[text]=${encodeURIComponent(q)}&page[limit]=12&fields[manga]=slug,canonicalTitle,titles,coverImage,posterImage,synopsis,categories,startDate`;
+    const res = await fetch(url, {
+      headers: { 'Accept': 'application/vnd.api+json' },
+      signal: AbortSignal.timeout(8000),
     });
-    const res = await fetchPostWithProxy('https://bato.to/apo/', body);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
-    const edges = json?.data?.getContent?.edges || [];
-    const items = edges.map(e => {
-      const d = e.data;
-      return {
-        id: d.id, title: d.name,
-        cover: d.urlCover300 || null,
-        desc: d.summary || '',
-        tags: (d.genres || []).slice(0,6),
-        year: null,
-        source: 'bato',
-        url: `https://bato.to${d.urlPath}`,
-        mihon: `tachiyomi://manga?sourceId=2655689874979638617&id=${d.id}`,
+    const items = (json.data || []).map(m => {
+      const a = m.attributes;
+      const cover = a.posterImage?.small || a.coverImage?.small || null;
+      const title = a.canonicalTitle || Object.values(a.titles || {})[0] || 'Sin título';
+      const year = a.startDate ? a.startDate.slice(0,4) : null;
+      return { id: m.id, title, cover,
+        desc: a.synopsis || '',
+        tags: [],
+        year,
+        source: 'kitsu',
+        url: `https://kitsu.app/manga/${a.slug}`,
+        mihon: `tachiyomi://manga?sourceId=3785177931138246951&id=${m.id}`,
       };
     });
-    return { source: 'bato', items };
-  } catch(e) {
-    return { source: 'bato', items: [], error: true, msg: e.message };
-  }
+    return { source: 'kitsu', items };
+  } catch(e) { return { source: 'kitsu', items: [], error: true }; }
 }
+
+// ── MyAnimeList (via Jikan) ───────────────────────────
+async function searchMAL(q) {
+  try {
+    const url = `https://api.jikan.moe/v4/manga?q=${encodeURIComponent(q)}&limit=12&sfw`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const items = (json.data || []).map(m => ({
+      id: m.mal_id,
+      title: m.title_english || m.title || 'Sin título',
+      cover: m.images?.jpg?.image_url || null,
+      desc: m.synopsis || '',
+      tags: (m.genres || []).slice(0,6).map(g => g.name),
+      year: m.published?.prop?.from?.year || null,
+      source: 'myanimelist',
+      url: m.url || `https://myanimelist.net/manga/${m.mal_id}`,
+      mihon: `tachiyomi://manga?sourceId=4572476700063842725&id=${m.mal_id}`,
+    }));
+    return { source: 'myanimelist', items };
+  } catch(e) { return { source: 'myanimelist', items: [], error: true }; }
+}
+
+// ── MangaUpdates ──────────────────────────────────────
+async function searchMangaUpdates(q) {
+  try {
+    const res = await fetch('https://api.mangaupdates.com/v1/series/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ search: q, perpage: 12 }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    const items = (json.results || []).map(r => {
+      const m = r.record;
+      return {
+        id: m.series_id,
+        title: m.title || 'Sin título',
+        cover: m.image?.url?.original || m.image?.url?.thumb || null,
+        desc: (m.description || '').replace(/<[^>]+>/g, ''),
+        tags: (m.genres || []).slice(0,6).map(g => g.genre),
+        year: m.year || null,
+        source: 'mangaupdates',
+        url: m.url || `https://www.mangaupdates.com/series/${m.series_id}`,
+        mihon: `tachiyomi://manga?sourceId=7459574716111215749&id=${m.series_id}`,
+      };
+    });
+    return { source: 'mangaupdates', items };
+  } catch(e) { return { source: 'mangaupdates', items: [], error: true }; }
+}
+
 
 // ── MODAL ─────────────────────────────────────────────
 function openModal(m) {
