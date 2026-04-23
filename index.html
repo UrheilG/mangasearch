@@ -540,11 +540,13 @@ function renderSection({ source, items, error }) {
   });
 }
 
+									   
+
 // ── MangaDex ──────────────────────────────────────────
 async function searchMangaDex(q) {
   try {
     const url = `https://api.mangadex.org/manga?title=${encodeURIComponent(q)}&limit=12&includes[]=cover_art&contentRating[]=safe&contentRating[]=suggestive&contentRating[]=erotica`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (json.data || []).map(m => {
@@ -556,12 +558,17 @@ async function searchMangaDex(q) {
         : null;
       const desc = m.attributes.description?.en || m.attributes.description?.es || '';
       const tags = (m.attributes.tags || []).slice(0,6).map(t => t.attributes.name.en);
-      return { id: m.id, title, cover, desc, tags, year: m.attributes.year,
-        source: 'mangadex', url: `https://mangadex.org/title/${m.id}`,
-        mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}` };
+      return {
+        id: m.id, title, cover, desc, tags, year: m.attributes.year,
+        source: 'mangadex',
+        url: `https://mangadex.org/title/${m.id}`,
+        mihon: `tachiyomi://manga?sourceId=2499283573021220928&id=${m.id}`,
+      };
     });
     return { source: 'mangadex', items };
-  } catch(e) { return { source: 'mangadex', items: [], error: true }; }
+  } catch(e) {
+    return { source: 'mangadex', items: [], error: true, msg: e.message };
+  }
 }
 
 // ── AniList ───────────────────────────────────────────
@@ -616,7 +623,9 @@ async function searchKitsu(q) {
       };
     });
     return { source: 'kitsu', items };
+			  
   } catch(e) { return { source: 'kitsu', items: [], error: true }; }
+   
 }
 
 // ── MyAnimeList (via Jikan) ───────────────────────────
@@ -627,6 +636,10 @@ async function searchMAL(q) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (json.data || []).map(m => ({
+															 
+							   
+																						
+									  
       id: m.mal_id,
       title: m.title_english || m.title || 'Sin título',
       cover: m.images?.jpg?.image_url || null,
@@ -638,13 +651,19 @@ async function searchMAL(q) {
       mihon: `tachiyomi://manga?sourceId=4572476700063842725&id=${m.mal_id}`,
     }));
     return { source: 'myanimelist', items };
+			  
   } catch(e) { return { source: 'myanimelist', items: [], error: true }; }
+   
 }
 
 // ── MangaUpdates ──────────────────────────────────────
 async function searchMangaUpdates(q) {
   try {
     const res = await fetch('https://api.mangaupdates.com/v1/series/search', {
+								 
+																																																	
+	   
+																 
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ search: q, perpage: 12 }),
@@ -653,6 +672,7 @@ async function searchMangaUpdates(q) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const json = await res.json();
     const items = (json.results || []).map(r => {
+								  
       const m = r.record;
       return {
         id: m.series_id,
@@ -667,7 +687,9 @@ async function searchMangaUpdates(q) {
       };
     });
     return { source: 'mangaupdates', items };
+			  
   } catch(e) { return { source: 'mangaupdates', items: [], error: true }; }
+   
 }
 
 
